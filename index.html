@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GraphRAG & Temporal Knowledge Memory Explorer | Codex</title>
+  
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- CSS Design Tokens & Styles -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- Encabezado de la SPA -->
+  <header class="app-header">
+    <div class="brand-section">
+      <div class="brand-badge" aria-hidden="true">🕸️</div>
+      <div class="brand-titles">
+        <h1>GraphRAG & Knowledge Explorer</h1>
+        <p class="brand-subtitle">Simulador de Recuperación Basada en Grafos vs. Naive Vector RAG</p>
+      </div>
+    </div>
+
+    <div class="header-controls">
+      <button id="btnExportSQL" class="btn" title="Descargar volcado SQL compatible con SQLite3 y Cloudflare D1">
+        <span>💾</span> Exportar SQLite (.sql)
+      </button>
+      <button id="btnResetView" class="btn btn-ghost" title="Restablecer encuadre del lienzo">
+        <span>🔄</span> Centrar Grafo
+      </button>
+    </div>
+  </header>
+
+  <!-- Espacio de Trabajo Principal (3 Paneles) -->
+  <main class="main-workspace">
+
+    <!-- Panel Izquierdo: Selección de Corpus e Ingesta -->
+    <aside class="corpus-sidebar">
+      <div class="sidebar-header">
+        <h2>Corpus de Conocimiento</h2>
+      </div>
+
+      <div class="sidebar-content">
+        <!-- Selector de Escenario Preconfigurado -->
+        <div class="corpus-picker-card">
+          <label for="corpusSelect">Escenario Activo</label>
+          <select id="corpusSelect" class="select-input">
+            <option value="microservices">Cloud-Native Zero Trust & Fallos en Cascada</option>
+            <option value="biomedical">Oncología Molecular & Terapia Dirigida</option>
+            <option value="custom">Ingerir Texto Personalizado</option>
+          </select>
+          <div id="corpusDescription" class="corpus-desc-box"></div>
+        </div>
+
+        <!-- Ingesta Dinámica de Texto -->
+        <div id="customIngestSection" class="custom-ingestion-box" style="display: none;">
+          <label for="customTextInput">Ingresar Texto Técnico / Corporativo</label>
+          <textarea id="customTextInput" placeholder="Pega aquí un informe, logs de incidentes o especificaciones para extraer entidades y relaciones en tiempo real..."></textarea>
+          <button id="btnExtractCustom" class="btn btn-primary">
+            <span>⚡</span> Extraer Grafo y Comunidades
+          </button>
+        </div>
+
+        <!-- Métricas del Grafo Actual -->
+        <div class="corpus-stats-badge">
+          <div class="stat-pill">
+            <div id="statNodes" class="stat-val">0</div>
+            <div class="stat-lbl">Nodos / Entidades</div>
+          </div>
+          <div class="stat-pill">
+            <div id="statEdges" class="stat-val">0</div>
+            <div class="stat-lbl">Relaciones Dirigidas</div>
+          </div>
+          <div class="stat-pill">
+            <div id="statCommunities" class="stat-val">0</div>
+            <div class="stat-lbl">Comunidades Leiden</div>
+          </div>
+          <div class="stat-pill">
+            <div id="statChunks" class="stat-val">0</div>
+            <div class="stat-lbl">Chunks Documentales</div>
+          </div>
+        </div>
+
+        <!-- Lista de Documentos del Corpus -->
+        <div class="corpus-picker-card">
+          <label>Documentos Ingeridos</label>
+          <div id="documentList" style="font-size: 0.74rem; display: flex; flex-direction: column; gap: 0.4rem;"></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Área Central: Visualizador Force-Directed y Barra de Consultas -->
+    <section class="center-viewport">
+      <!-- Barra superior de consulta -->
+      <div class="query-top-toolbar">
+        <div class="query-input-row">
+          <input type="text" id="queryInput" class="text-input" placeholder="Escribe una pregunta multi-salto o global (ej. ¿Cómo afecta un fallo en PostgreSQL al API Gateway?)...">
+          <button id="btnRunQuery" class="btn btn-primary">
+            <span>🔍</span> Comparar RAG
+          </button>
+        </div>
+
+        <!-- Chips de consultas sugeridas -->
+        <div id="presetQueriesContainer" class="preset-queries-row"></div>
+      </div>
+
+      <!-- Lienzo Interactivo 2D con Simulación Física -->
+      <div class="canvas-container">
+        <canvas id="graphCanvas"></canvas>
+
+        <!-- Leyenda Flotante de Comunidades -->
+        <div id="canvasLegend" class="canvas-legend">
+          <div style="font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Filtrar Clúster</div>
+          <!-- Inyectado dinámicamente -->
+        </div>
+
+        <!-- Controles de Navegación del Grafo -->
+        <div class="canvas-floating-controls">
+          <span>Arrastre: Pan | Rueda: Zoom | Click Nodo: Inspección</span>
+          <button id="btnClearHighlights" class="btn btn-ghost" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;">
+            Limpiar Ruta
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Panel Derecho: Comparativa A/B e Inspector de Entidades -->
+    <aside class="inspection-sidebar">
+      <div class="panel-tabs">
+        <button id="tabBtnComparison" class="tab-btn active">Comparador A/B</button>
+        <button id="tabBtnInspector" class="tab-btn">Inspector de Nodo</button>
+        <button id="tabBtnSQLite" class="tab-btn">Auditoría SQLite</button>
+      </div>
+
+      <!-- Contenido Tab 1: Comparativa A/B -->
+      <div id="tabContentComparison" class="tab-content">
+        <!-- Tarjeta Naive Vector -->
+        <div class="comparison-card card-vector">
+          <div class="card-header-line">
+            <span class="card-title-badge">
+              <span>📊</span> Naive Vector RAG
+            </span>
+            <span class="badge-tag">Top-K Coseno</span>
+          </div>
+          <div class="metrics-row">
+            <div class="metric-item">Latencia: <strong id="vecLatency">--</strong></div>
+            <div class="metric-item">Context Recall: <strong id="vecRecall">--</strong></div>
+          </div>
+          <div id="vecResponse" class="response-box">Ejecuta una consulta para comparar el contexto recuperado por similitud vectorial pura...</div>
+        </div>
+
+        <!-- Tarjeta GraphRAG -->
+        <div class="comparison-card card-graph">
+          <div class="card-header-line">
+            <span class="card-title-badge">
+              <span>🕸️</span> GraphRAG (Comunidades + Subgrafos)
+            </span>
+            <span class="badge-tag" style="background: hsla(185, 95%, 50%, 0.2); color: var(--accent-cyan);">Multi-Hop</span>
+          </div>
+          <div class="metrics-row">
+            <div class="metric-item">Latencia: <strong id="graphLatency">--</strong></div>
+            <div class="metric-item">Faithfulness: <strong id="graphFaith">--</strong></div>
+          </div>
+          <div id="graphResponse" class="response-box">Ejecuta una consulta para observar la reconstrucción de contexto causal y la síntesis basada en el grafo...</div>
+        </div>
+
+        <!-- Resumen de Ventaja Operativa -->
+        <div class="delta-summary-box">
+          <h4>💡 Análisis Comparativo</h4>
+          <p id="deltaInsight">Selecciona una consulta sugerida o redacta una pregunta para evaluar cómo GraphRAG resuelve preguntas globales y relaciones entre documentos dispersos donde la búsqueda vectorial falla.</p>
+        </div>
+      </div>
+
+      <!-- Contenido Tab 2: Inspector de Nodo -->
+      <div id="tabContentInspector" class="tab-content" style="display: none;">
+        <div id="emptyInspectorNotice" style="color: var(--text-muted); font-size: 0.8rem; text-align: center; margin-top: 2rem;">
+          Haz clic en cualquier nodo del grafo para inspeccionar sus atributos, tipo semántico, peso y aristas dirigidas.
+        </div>
+        <div id="nodeDetailsContainer" class="entity-details-card" style="display: none;">
+          <div class="entity-header">
+            <h3 id="inspectLabel">Nombre de Entidad</h3>
+            <span id="inspectType" class="badge-tag">TIPO</span>
+          </div>
+          <p id="inspectDesc" style="font-size: 0.78rem; color: var(--text-secondary);"></p>
+          <div class="entity-meta-grid">
+            <div class="meta-field">Comunidad:<span id="inspectCommunity">#</span></div>
+            <div class="meta-field">Score Centralidad:<span id="inspectScore">1.0</span></div>
+            <div class="meta-field">ID de Nodo:<span id="inspectId">n-1</span></div>
+            <div class="meta-field">Grado de Conexión:<span id="inspectDegree">0</span></div>
+          </div>
+
+          <div style="margin-top: 0.5rem;">
+            <label style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Relaciones Directas</label>
+            <div id="inspectRelationsList" class="relations-list" style="margin-top: 0.4rem;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Contenido Tab 3: Auditoría SQLite & Queries -->
+      <div id="tabContentSQLite" class="tab-content" style="display: none;">
+        <div class="comparison-card">
+          <div class="card-header-line">
+            <span class="card-title-badge">🗄️ Base de Datos Local SQLite</span>
+            <span class="badge-tag">Cloudflare D1 Spec</span>
+          </div>
+          <p style="font-size: 0.75rem; color: var(--text-secondary);">
+            Persistencia relacional de <code>kg_nodes</code>, <code>kg_edges</code>, <code>kg_communities</code> y el registro de consultas <code>rag_queries</code>.
+          </p>
+          <button id="btnDownloadSQLTab" class="btn btn-primary" style="margin-top: 0.4rem;">
+            <span>📥</span> Descargar schema_and_data.sql
+          </button>
+        </div>
+
+        <div class="corpus-picker-card">
+          <label>Historial de Consultas Evaluadas</label>
+          <div id="queryHistoryList" style="font-size: 0.72rem; display: flex; flex-direction: column; gap: 0.4rem; max-height: 250px; overflow-y: auto;"></div>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- Pie de Página -->
+  <footer class="app-footer">
+    <div>Codex Portfolio &bull; <strong>GraphRAG & Temporal Knowledge Memory Explorer</strong></div>
+    <div class="footer-badges">
+      <span>Leiden/Louvain Clustering</span>
+      <span>SQLite 3.45+ / D1</span>
+      <span>v1.0.0</span>
+    </div>
+  </footer>
+
+  <!-- Módulos de la Aplicación -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
